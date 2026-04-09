@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>MACD 动能演推模拟器</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f5f5; padding: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .controls { margin-bottom: 20px; display: flex; gap: 15px; justify-content: center; }
+        button { padding: 12px 24px; cursor: pointer; border: none; border-radius: 6px; font-weight: bold; color: white; transition: 0.2s;}
+        .btn-up { background: #d7263d; } .btn-up:hover { background: #b01b2e; }
+        .btn-flat { background: #5c6bc0; } .btn-flat:hover { background: #3f51b5; }
+        .btn-down { background: #00897b; } .btn-down:hover { background: #00695c; }
+        #chart { width: 100%; height: 700px; background: #fff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); padding: 20px; box-sizing: border-box;}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="controls">
+            <button class="btn-up" onclick="nextStep('up')">🔥 动能加速爆发 (拉升)</button>
+            <button class="btn-flat" onclick="nextStep('flat')">⚖️ 动能高位衰竭 (震荡)</button>
+            <button class="btn-down" onclick="nextStep('down')">🧊 动能趋势反转 (砸盘)</button>
+        </div>
+        <div id="chart"></div>
+    </div>
+
+    <script>
+        // 初始化基础数据
+        let prices = [100];
+        let times = ['T0'];
+        let ema12 = [100], ema26 = [100], dif = [0], dea = [0], macd = [0];
+        let stepCount = 0;
+
+        // 计算 EMA 的核心函数
+        function calcEMA(todayPrice, prevEMA, N) {
+            const alpha = 2 / (N + 1);
+            return (todayPrice * alpha) + (prevEMA * (1 - alpha));
+        }
+
+        // 行情推演逻辑
+        function nextStep(trend) {
+            stepCount++;
+            times.push('T' + stepCount);
+            
+            let lastPrice = prices[prices.length - 1];
+            let newPrice = lastPrice;
+            
+            // 模拟随机游走与趋势控制
+            let noise = (Math.random() - 0.5) * 2; 
+            if (trend === 'up') newPrice += 2.5 + noise;
+            else if (trend === 'flat') newPrice += noise * 1.5;
+            else if (trend === 'down') newPrice -= 3.0 - noise;
+
+            prices.push(newPrice);
+
+            // 迭代计算 MACD 核心指标
+            let currentEma12 = calcEMA(newPrice, ema12[ema12.length - 1], 12);
+            let currentEma26 = calcEMA(newPrice, ema26[ema26.length - 1], 26);
+            let currentDif = currentEma12 - currentEma26;
+            let currentDea = calcEMA(currentDif, dea[dea.length - 1], 9);
+            let currentMacd = (currentDif - currentDea) * 2;
+
+            ema12.push(currentEma12);
+            ema26.push(currentEma26);
+            dif.push(currentDif);
+            dea.push(currentDea);
+            macd.push(currentMacd);
+
+            updateChart();
+        }
+
+        // 初始化 ECharts 实例
+        const myChart = echarts.init(document.getElementById('chart'));
+
+        function updateChart() {
+            const option = {
+                tooltip: { trigger: 'axis', axisPointer: { type: 'cross' } },
+                axisPointer: { link: { xAxisIndex: 'all' } },
+                grid: [
+                    { left: '5%', right: '5%', top: '5%', height: '45%' }, // 主图区域 (价格与均线)
+                    { left: '5%', right: '5%', top: '60%', height: '35%' } // 副图区域 (MACD)
+                ],
+                xAxis: [
+                    { type: 'category', data: times, boundaryGap: false, gridIndex: 0 },
+                    { type: 'category', data: times, boundaryGap: false, gridIndex: 1, show: false }
+                ],
+                yAxis: [
+                    { type: 'value', scale: true, gridIndex: 0, splitLine: { show: true, lineStyle: { type: 'dashed', color: '#eee' } } },
+                    { type: 'value', gridIndex: 1, splitLine: { show: false } }
+                ],
+                series: [
+                    // --- 主图数据 ---
+                    { name: 'Price', type: 'line', data: prices, xAxisIndex: 0, yAxisIndex: 0, itemStyle: { color: '#333' }, lineStyle: { width: 3 } },
+                    { name: 'EMA12 (快线)', type: 'line', data: ema12, xAxisIndex: 0, yAxisIndex: 0, itemStyle: { color: '#E91E63' } },
+                    { name: 'EMA26 (慢线)', type: 'line', data: ema26, xAxisIndex: 0, yAxisIndex: 0, itemStyle: { color: '#2196F3' } },
+                    
+                    // --- 副图数据 ---
+                    { name: 'DIF', type: 'line', data: dif, xAxisIndex: 1, yAxisIndex: 1, itemStyle: { color: '#E91E63' }, lineStyle: { width: 2 } },
+                    { name: 'DEA', type: 'line', data: dea, xAxisIndex: 1, yAxisIndex: 1, itemStyle: { color: '#2196F3' }, lineStyle: { width: 2 } },
+                    { 
+                        name: 'MACD', 
+                        type: 'bar', 
+                        data: macd, 
+                        xAxisIndex: 1, 
+                        yAxisIndex: 1,
+                        itemStyle: {
+                            color: function(params) {
+                                return params.data >= 0 ? '#ef232a' : '#14b143'; // 经典的红绿柱配色
+                            }
+                        }
+                    }
+                ]
+            };
+            myChart.setOption(option);
+        }
+
+        // 初始生成一些震荡数据预热图表
+        for(let i=0; i<30; i++) nextStep('flat');
+    </script>
+</body>
+</html>
